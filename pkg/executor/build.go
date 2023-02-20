@@ -31,6 +31,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/empty"
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
+	"github.com/google/go-containerregistry/pkg/v1/types"
 	"github.com/moby/buildkit/frontend/dockerfile/instructions"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -516,8 +517,20 @@ func (s *stageBuilder) saveSnapshotToLayer(tarPath string) (v1.Layer, error) {
 	}
 
 	var layer v1.Layer
+	img_mt, err := s.image.MediaType()
+	if err != nil {
+		return nil, err
+	}
+	is_oci_image := ( img_mt == types.OCIManifestSchema1 )
+	// or is it types.OCIConfigJSON or types.OCIContentDescriptor or types.OCIImageIndex ??
 	if s.opts.CompressedCaching == true {
-		layer, err = tarball.LayerFromFile(tarPath, tarball.WithCompressedCaching)
+		if is_oci_image {
+			layer, err = tarball.LayerFromFile(tarPath, tarball.WithCompressedCaching, tarball.WithMediaType(types.OCILayer))
+		} else {
+			layer, err = tarball.LayerFromFile(tarPath, tarball.WithCompressedCaching)
+		}
+	} else if is_oci_image {
+		layer, err = tarball.LayerFromFile(tarPath, tarball.WithMediaType(types.OCIUncompressedLayer))
 	} else {
 		layer, err = tarball.LayerFromFile(tarPath)
 	}
